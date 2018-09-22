@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# Test the iostats counters for time spent doing I/O.
+# Similar to block/018, but all I/Os take < 1 jiffy. Regression test for commit
+# b57e99b4b8b0 ("block: use nanosecond resolution for iostat").
 #
 # Copyright (C) 2018 Omar Sandoval
 #
@@ -20,7 +21,7 @@
 . tests/block/rc
 . common/null_blk
 
-DESCRIPTION="do I/O and check iostats times"
+DESCRIPTION="do I/O faster than a jiffy and check iostats times"
 QUICK=1
 
 requires() {
@@ -49,23 +50,27 @@ test() {
 
 		echo "queue mode $queue_mode"
 
+		# The maximum value for CONFIG_HZ is 1000. I.e., a tick is one
+		# millisecond. So, make each I/O take half a millisecond.
 		if ! _init_null_blk queue_mode="$queue_mode" irqmode=2 \
-		     completion_nsec=1000000000; then
+		     completion_nsec=500000; then
 			continue
 		fi
 
 		init_times
 		show_times
 
-		dd if=/dev/nullb0 of=/dev/null bs=4096 iflag=direct count=1 status=none
+		# 1500 * 0.5 ms is 0.75 seconds, allowing for some extra
+		# overhead so that it rounds to one second.
+		dd if=/dev/nullb0 of=/dev/null bs=4096 iflag=direct count=1500 status=none
 		show_times
 
-		dd if=/dev/zero of=/dev/nullb0 bs=4096 oflag=direct count=1 status=none
+		dd if=/dev/zero of=/dev/nullb0 bs=4096 oflag=direct count=1500 status=none
 		show_times
 
-		dd if=/dev/nullb0 of=/dev/null bs=4096 iflag=direct count=1 status=none &
-		dd if=/dev/zero of=/dev/nullb0 bs=4096 oflag=direct count=1 status=none &
-		dd if=/dev/zero of=/dev/nullb0 bs=4096 oflag=direct count=1 status=none &
+		dd if=/dev/nullb0 of=/dev/null bs=4096 iflag=direct count=1500 status=none &
+		dd if=/dev/zero of=/dev/nullb0 bs=4096 oflag=direct count=1500 status=none &
+		dd if=/dev/zero of=/dev/nullb0 bs=4096 oflag=direct count=1500 status=none &
 		wait
 		show_times
 
